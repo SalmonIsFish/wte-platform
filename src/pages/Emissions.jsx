@@ -1,20 +1,199 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "../context/AppContext";
 import TopBar from "../components/TopBar";
 import StatusPill from "../components/StatusPill";
-import { FileText, Check } from "lucide-react";
+import { FileText, Check, Bell, BellRing } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
+import jsPDF from "jspdf";
+
+// Hardcoded demo contacts — in production this would pull from a plant staff directory / on-call roster
+const RECOMMENDED_CONTACTS = {
+  pm: { role: "Compliance Officer", name: "Aisyah Rahman", phone: "+60 12-345 6789" },
+  co: { role: "Shift Engineer", name: "Farid Aziz", phone: "+60 13-789 0123" },
+};
+
+function getBreachRecommendations(reading, thresholds) {
+  const recs = [];
+  const pmOver = reading.pm_mg_nm3 > thresholds.pm_limit_mg_nm3;
+  const coOver = reading.co_mg_nm3 > thresholds.co_limit_mg_nm3;
+
+  if (pmOver) {
+    const pctOver = (
+      ((reading.pm_mg_nm3 - thresholds.pm_limit_mg_nm3) / thresholds.pm_limit_mg_nm3) *
+      100
+    ).toFixed(0);
+    recs.push({
+      severity: pctOver > 20 ? "high" : "moderate",
+      text: `PM reading is ${pctOver}% above the DOE limit. Recommend increasing filtration cycle frequency and inspecting the electrostatic precipitator.`,
+      contact: RECOMMENDED_CONTACTS.pm,
+    });
+  }
+  if (coOver) {
+    recs.push({
+      severity: "moderate",
+      text: `CO reading exceeds limit — recommend checking combustion air supply and burner temperature stability.`,
+      contact: RECOMMENDED_CONTACTS.co,
+    });
+  }
+  return recs;
+}
 
 export default function Emissions() {
   const { data, permissions, thresholds } = useApp();
   const [generated, setGenerated] = useState(false);
+  const [alertsEnabled, setAlertsEnabled] = useState(false);
+  const [notifiedDates, setNotifiedDates] = useState([]);
   const readings = data.emissions_readings;
   const breach = readings.find((r) => r.compliance_status === "breach");
+
+  // Fire a browser notification the moment a breach reading is present,
+  // once per breach date, only if the user has opted in.
+  useEffect(() => {
+    if (!alertsEnabled || !breach) return;
+    if (notifiedDates.includes(breach.date)) return;
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+
+    new Notification("⚠ Emissions Compliance Breach", {
+      body: `${breach.date} — PM/CO readings exceeded DOE limits. Review required.`,
+      tag: `breach-${breach.date}`,
+    });
+    setNotifiedDates((prev) => [...prev, breach.date]);
+  }, [alertsEnabled, breach, notifiedDates]);
+
+  const handleEnableAlerts = async () => {
+    if (typeof Notification === "undefined") return;
+    if (Notification.permission === "granted") {
+      setAlertsEnabled(true);
+      return;
+    }
+    const result = await Notification.requestPermission();
+    if (result === "granted") setAlertsEnabled(true);
+  };
+
+  const handleGenerateReport = () => {
+    const doc = new jsPDF();
+    const plantId = "PLANT-04";
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Header
+    doc.setFontSize(16);
+    doc.setFont(undefined, "bold");
+    doc.text("Emissions Compliance Report", 14, 20);
+    doc.setFontSize(10);
+    doc.setFont(undefined, "normal");
+    doc.text(`Plant: ${plantId} · Selangor`, 14, 27);
+    doc.text(`Generated: ${today}`, 14, 32);
+    doc.text(`Reporting window: ${readings[0].date} to ${readings[readings.length - 1].date}`, 14, 37);
+
+    // Thresholds used
+    doc.setFontSize(11);
+    doc.setFont(undefined, "bold");
+    doc.text("Applied DOE Limits", 14, 48);
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(10);
+    doc.text(`PM: ${thresholds.pm_limit_mg_nm3} mg/Nm³   CO: ${thresholds.co_limit_mg_nm3} mg/Nm³`, 14, 54);
+
+    // Breach summary
+    doc.setFontSize(11);
+    doc.setFont(undefined, "bold");
+    doc.text("Compliance Summary", 14, 65);
+    doc.setFont(undefined, "normal");
+    doc.setFontSize(10);
+    doc.text(
+      breach
+        ? `1 breach event detected on ${breach.date}. PM: ${breach.pm_mg_nm3} mg/Nm³ (limit ${thresholds.pm_limit_mg_nm3}), CO: ${breach.co_mg_nm3} mg/Nm³ (limit ${thresholds.co_limit_mg_nm3}).`
+        : "No breaches detected in this reporting window.",
+      14,
+      71,
+      { maxWidth: 180 }
+    );
+
+    // Readings table
+    let y = 88;
+    doc.setFontSize(11);
+    doc.setFont(undefined, "bold");
+    doc.text("Daily Readings", 14, y);
+    y += 8;
+
+    doc.setFontSize(9);
+    doc.setFont(undefined, "bold");
+    doc.text("Date", 14, y);
+    doc.text("PM (mg/Nm³)", 60, y);
+    doc.text("CO (mg/Nm³)", 110, y);
+    doc.text("Status", 160, y);
+    y += 2;
+    doc.line(14, y, 196, y);
+    y += 6;
+
+    doc.setFont(undefined, "normal");
+    readings.forEach((r) => {
+      const isBreach = r.compliance_status === "breach";
+      doc.setTextColor(isBreach ? 200 : 30, isBreach ? 40 : 30, isBreach ? 40 : 30);
+      doc.text(r.date, 14, y);
+      doc.text(r.pm_mg_nm3.toFixed(1), 60, y);
+      doc.text(r.co_mg_nm3.toFixed(1), 110, y);
+      doc.text(r.compliance_status.toUpperCase(), 160, y);
+      y += 7;
+    });
+
+    doc.setTextColor(30, 30, 30);
+    doc.setFontSize(8);
+    doc.text(
+      "This report was generated by WTE Intelligence decision-support software. All flagged events require operator/compliance officer review — this system does not take autonomous corrective action.",
+      14,
+      y + 10,
+      { maxWidth: 180 }
+    );
+
+    doc.save(`emissions-compliance-report-${plantId}-${today}.pdf`);
+    setGenerated(true);
+  };
 
   return (
     <div className="flex-1 overflow-y-auto">
       <TopBar title="Emissions & Compliance" subtitle="PM and CO readings vs. DOE limits" />
       <div className="p-8 flex flex-col gap-6">
+        {breach && (
+          <div className="bg-status-alert/10 border border-status-alert/40 rounded-lg overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3">
+              <div className="flex items-center gap-2 text-status-alert text-sm font-medium">
+                <BellRing size={16} />
+                Compliance breach on {breach.date} — PM/CO exceeded DOE limits
+              </div>
+              {!alertsEnabled && (
+                <button
+                  onClick={handleEnableAlerts}
+                  className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-md bg-accent-dim text-accent hover:brightness-125"
+                >
+                  <Bell size={13} />
+                  Enable Alerts
+                </button>
+              )}
+            </div>
+
+            <div className="border-t border-status-alert/30 px-5 py-4 flex flex-col gap-3">
+              <p className="text-xs font-mono uppercase tracking-wide text-text-tertiary">
+                Recommended Actions (AI-generated, advisory only)
+              </p>
+              {getBreachRecommendations(breach, thresholds).map((rec, i) => (
+                <div key={i} className="flex items-start justify-between gap-4 text-sm">
+                  <p className="text-text-primary">{rec.text}</p>
+                  <div className="shrink-0 text-right">
+                    <p className="text-xs text-text-secondary">{rec.contact.role}</p>
+                    <p className="text-xs font-mono text-accent">
+                      {rec.contact.name} · {rec.contact.phone}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              <p className="text-xs text-text-tertiary italic mt-1">
+                These are system-generated recommendations. Final decisions and any operational changes require
+                operator/supervisor approval.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <ChartPanel
             title="Particulate Matter (PM)"
@@ -46,10 +225,18 @@ export default function Emissions() {
               {readings.map((r) => (
                 <tr key={r.date} className="border-b border-base-hairline last:border-0">
                   <td className="px-4 py-3 font-mono text-text-primary">{r.date}</td>
-                  <td className={`px-4 py-3 tabular ${r.pm_mg_nm3 > thresholds.pm_limit_mg_nm3 ? "text-status-alert" : "text-text-primary"}`}>
+                  <td
+                    className={`px-4 py-3 tabular ${
+                      r.pm_mg_nm3 > thresholds.pm_limit_mg_nm3 ? "text-status-alert" : "text-text-primary"
+                    }`}
+                  >
                     {r.pm_mg_nm3.toFixed(1)}
                   </td>
-                  <td className={`px-4 py-3 tabular ${r.co_mg_nm3 > thresholds.co_limit_mg_nm3 ? "text-status-alert" : "text-text-primary"}`}>
+                  <td
+                    className={`px-4 py-3 tabular ${
+                      r.co_mg_nm3 > thresholds.co_limit_mg_nm3 ? "text-status-alert" : "text-text-primary"
+                    }`}
+                  >
                     {r.co_mg_nm3.toFixed(1)}
                   </td>
                   <td className="px-4 py-3">
@@ -72,7 +259,7 @@ export default function Emissions() {
           </div>
           <button
             disabled={!permissions.canGenerateReport}
-            onClick={() => setGenerated(true)}
+            onClick={handleGenerateReport}
             className="flex items-center gap-2 bg-accent-dim text-accent text-sm font-medium px-4 py-2 rounded-md hover:brightness-125 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {generated ? <Check size={16} /> : <FileText size={16} />}
@@ -89,12 +276,20 @@ function ChartPanel({ title, unit, dataKey, limit, data }) {
     <div className="bg-base-panel border border-base-border rounded-lg p-5 shadow-panel">
       <div className="flex items-baseline justify-between mb-3">
         <h2 className="font-display text-sm font-semibold uppercase tracking-wide text-text-secondary">{title}</h2>
-        <span className="text-xs font-mono text-text-tertiary">Limit: {limit} {unit}</span>
+        <span className="text-xs font-mono text-text-tertiary">
+          Limit: {limit} {unit}
+        </span>
       </div>
       <ResponsiveContainer width="100%" height={180}>
         <LineChart data={data}>
           <CartesianGrid stroke="#2A2F35" vertical={false} />
-          <XAxis dataKey="date" tick={{ fill: "#8B9199", fontSize: 10 }} axisLine={{ stroke: "#2A2F35" }} tickLine={false} tickFormatter={(d) => d.slice(5)} />
+          <XAxis
+            dataKey="date"
+            tick={{ fill: "#8B9199", fontSize: 10 }}
+            axisLine={{ stroke: "#2A2F35" }}
+            tickLine={false}
+            tickFormatter={(d) => d.slice(5)}
+          />
           <YAxis tick={{ fill: "#8B9199", fontSize: 10 }} axisLine={false} tickLine={false} />
           <Tooltip contentStyle={{ background: "#1C2024", border: "1px solid #2A2F35", borderRadius: 6, fontSize: 12 }} />
           <ReferenceLine y={limit} stroke="#E85D4C" strokeDasharray="4 4" strokeWidth={1} />

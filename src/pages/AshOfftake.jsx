@@ -1,7 +1,25 @@
 import { useApp } from "../context/AppContext";
 import TopBar from "../components/TopBar";
 import StatusPill from "../components/StatusPill";
-import { Truck } from "lucide-react";
+import { Truck, MapPin } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+
+// Fix default marker icon path issue with bundlers like Vite
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+// Hardcoded demo coordinates — swap for real buyer addresses when integrating
+const BUYER_LOCATIONS = {
+  "GreenBlock Aggregates Sdn Bhd": { lat: 3.0733, lng: 101.5185, address: "Shah Alam, Selangor" },
+};
+
+const PLANT_LOCATION = { lat: 2.9927, lng: 101.7877, address: "PLANT-04, Selangor" };
 
 export default function AshOfftake() {
   const { data, permissions, dispatchApproved, setDispatchApproved } = useApp();
@@ -9,7 +27,7 @@ export default function AshOfftake() {
   return (
     <div className="flex-1 overflow-y-auto">
       <TopBar title="Ash Offtake" subtitle="Match accumulated ash to registered construction-material buyers" />
-      <div className="p-8">
+      <div className="p-8 flex flex-col gap-6">
         <div className="bg-base-panel border border-base-border rounded-lg shadow-panel overflow-hidden">
           <table className="w-full text-sm">
             <thead>
@@ -47,7 +65,43 @@ export default function AshOfftake() {
             </tbody>
           </table>
         </div>
-        <p className="text-xs text-text-tertiary mt-4">
+
+        <div className="bg-base-panel border border-base-border rounded-lg shadow-panel overflow-hidden">
+          <div className="flex items-center gap-2 px-5 py-3 border-b border-base-border">
+            <MapPin size={14} className="text-accent" />
+            <h3 className="font-display text-sm font-semibold text-text-primary">Dispatch Destinations</h3>
+          </div>
+          <div style={{ height: 280 }}>
+            <MapContainer
+              center={[PLANT_LOCATION.lat, PLANT_LOCATION.lng]}
+              zoom={10}
+              style={{ height: "100%", width: "100%" }}
+              scrollWheelZoom={false}
+            >
+              <TileLayer
+                attribution='&copy; OpenStreetMap contributors'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              <Marker position={[PLANT_LOCATION.lat, PLANT_LOCATION.lng]}>
+                <Popup>WTE Plant — {PLANT_LOCATION.address}</Popup>
+              </Marker>
+              {data.ash_log.map((a, i) => {
+                const loc = BUYER_LOCATIONS[a.matched_buyer];
+                if (!loc) return null;
+                return (
+                  <Marker key={i} position={[loc.lat, loc.lng]}>
+                    <Popup>
+                      {a.matched_buyer}<br />
+                      {a.ash_accumulated_tons.toFixed(2)} t — {a.dispatch_status.replace(/_/g, " ")}
+                    </Popup>
+                  </Marker>
+                );
+              })}
+            </MapContainer>
+          </div>
+        </div>
+
+        <p className="text-xs text-text-tertiary">
           Dispatch is always human-approved — the system recommends a match and quantity, it never books logistics automatically.
         </p>
       </div>

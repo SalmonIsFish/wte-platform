@@ -1,20 +1,67 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import TopBar from "../components/TopBar";
 import StatusPill from "../components/StatusPill";
-import { X } from "lucide-react";
+import { X, Search } from "lucide-react";
+
+const STATUS_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "flagged", label: "Flagged" },
+  { id: "clear", label: "Clear" },
+  { id: "resolved", label: "Resolved" },
+];
 
 export default function WasteIntake() {
   const { data, resolveBatch, permissions } = useApp();
   const [selected, setSelected] = useState(null);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
-  const batches = [...data.waste_batches].sort((a, b) => (a.status === "flagged" ? -1 : 1));
+  const batches = useMemo(() => {
+    let list = [...data.waste_batches].sort((a, b) => (a.status === "flagged" ? -1 : 1));
+    if (statusFilter !== "all") list = list.filter((b) => b.status === statusFilter);
+    if (query.trim()) {
+      const q = query.trim().toLowerCase();
+      list = list.filter(
+        (b) => b.batch_id.toLowerCase().includes(q) || b.source.toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [data.waste_batches, query, statusFilter]);
 
   return (
     <div className="flex-1 overflow-y-auto flex">
       <div className="flex-1 overflow-y-auto">
         <TopBar title="Waste Intake" subtitle="Incoming batches with AI density-anomaly screening" />
         <div className="p-8">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-1 max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search batch ID or source..."
+                className="w-full bg-base-panelraised border border-base-hairline rounded-md pl-8 pr-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+            <div className="flex gap-1.5">
+              {STATUS_FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setStatusFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+                    statusFilter === f.id
+                      ? "bg-accent-dim text-accent border-accent-dim"
+                      : "text-text-secondary border-base-hairline hover:text-text-primary"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-text-tertiary ml-auto">{batches.length} batches</span>
+          </div>
           <div className="bg-base-panel border border-base-border rounded-lg shadow-panel overflow-hidden">
             <table className="w-full text-sm">
               <thead>

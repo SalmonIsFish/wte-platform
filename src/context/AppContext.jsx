@@ -18,8 +18,18 @@ export const ROLE_PERMISSIONS = {
   compliance: { canApproveBatch: false, canRejectBatch: false, canGenerateReport: true, canApproveDispatch: false },
 };
 
+// Simulated user directory — no real backend/auth server. Good enough for a
+// hackathon demo login screen; be upfront about this if a judge asks.
+export const DEMO_USERS = [
+  { id: "operator1", password: "demo123", name: "Aiman Rahman", role: "operator", title: "Plant Operator", shift: "Day Shift" },
+  { id: "supervisor1", password: "demo123", name: "Nurul Hidayah", role: "supervisor", title: "Shift Supervisor", shift: "Day Shift" },
+  { id: "compliance1", password: "demo123", name: "Wei Ling Tan", role: "compliance", title: "Compliance Officer", shift: "Office Hours" },
+];
+
 export function AppProvider({ children }) {
   const [role, setRole] = useState("supervisor");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
 
   // Settings module: configurable thresholds. Changing these client-side
   // re-derives batch/emissions status live, so Settings actually does something
@@ -78,9 +88,33 @@ export function AppProvider({ children }) {
     setBatchActions((prev) => ({ ...prev, [batch_id]: action }));
   };
 
+  const login = (userId, password) => {
+    const user = DEMO_USERS.find((u) => u.id === userId && u.password === password);
+    if (!user) return { success: false, error: "Invalid ID or password" };
+    setCurrentUser(user);
+    setRole(user.role);
+    setIsAuthenticated(true);
+    return { success: true };
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+  };
+
+  // Used by the top-bar "viewing as" switcher during demos — swaps to the
+  // matching demo user for that role so identity and permissions never
+  // drift apart. This is a demo convenience, not a real role-change action.
+  const switchRole = (roleId) => {
+    const user = DEMO_USERS.find((u) => u.role === roleId);
+    if (!user) return;
+    setCurrentUser(user);
+    setRole(roleId);
+  };
+
   const value = {
     role,
-    setRole,
+    switchRole,
     permissions: ROLE_PERMISSIONS[role],
     thresholds,
     setThresholds,
@@ -88,6 +122,10 @@ export function AppProvider({ children }) {
     resolveBatch,
     dispatchApproved,
     setDispatchApproved,
+    isAuthenticated,
+    currentUser,
+    login,
+    logout,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

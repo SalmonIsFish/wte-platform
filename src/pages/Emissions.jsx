@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useApp } from "../context/AppContext";
 import TopBar from "../components/TopBar";
 import StatusPill from "../components/StatusPill";
-import { FileText, Check, Bell, BellRing } from "lucide-react";
+import { FileText, Check, Bell, BellRing, Search } from "lucide-react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine } from "recharts";
 import jsPDF from "jspdf";
 
@@ -43,8 +43,17 @@ export default function Emissions() {
   const [generated, setGenerated] = useState(false);
   const [alertsEnabled, setAlertsEnabled] = useState(false);
   const [notifiedDates, setNotifiedDates] = useState([]);
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const readings = data.emissions_readings;
   const breach = readings.find((r) => r.compliance_status === "breach");
+
+  const filteredReadings = useMemo(() => {
+    let list = readings;
+    if (statusFilter !== "all") list = list.filter((r) => r.compliance_status === statusFilter);
+    if (query.trim()) list = list.filter((r) => r.date.includes(query.trim()));
+    return list;
+  }, [readings, query, statusFilter]);
 
   // Fire a browser notification the moment a breach reading is present,
   // once per breach date, only if the user has opted in.
@@ -75,7 +84,6 @@ export default function Emissions() {
     const plantId = "PLANT-04";
     const today = new Date().toISOString().slice(0, 10);
 
-    // Header
     doc.setFontSize(16);
     doc.setFont(undefined, "bold");
     doc.text("Emissions Compliance Report", 14, 20);
@@ -85,7 +93,6 @@ export default function Emissions() {
     doc.text(`Generated: ${today}`, 14, 32);
     doc.text(`Reporting window: ${readings[0].date} to ${readings[readings.length - 1].date}`, 14, 37);
 
-    // Thresholds used
     doc.setFontSize(11);
     doc.setFont(undefined, "bold");
     doc.text("Applied DOE Limits", 14, 48);
@@ -93,7 +100,6 @@ export default function Emissions() {
     doc.setFontSize(10);
     doc.text(`PM: ${thresholds.pm_limit_mg_nm3} mg/Nm³   CO: ${thresholds.co_limit_mg_nm3} mg/Nm³`, 14, 54);
 
-    // Breach summary
     doc.setFontSize(11);
     doc.setFont(undefined, "bold");
     doc.text("Compliance Summary", 14, 65);
@@ -108,7 +114,6 @@ export default function Emissions() {
       { maxWidth: 180 }
     );
 
-    // Readings table
     let y = 88;
     doc.setFontSize(11);
     doc.setFont(undefined, "bold");
@@ -212,6 +217,38 @@ export default function Emissions() {
         </div>
 
         <div className="bg-base-panel border border-base-border rounded-lg shadow-panel overflow-hidden">
+          <div className="flex items-center gap-3 p-4 border-b border-base-border">
+            <div className="relative flex-1 max-w-xs">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search date (YYYY-MM-DD)..."
+                className="w-full bg-base-panelraised border border-base-hairline rounded-md pl-8 pr-3 py-2 text-sm text-text-primary focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+            <div className="flex gap-1.5">
+              {[
+                { id: "all", label: "All" },
+                { id: "compliant", label: "Compliant" },
+                { id: "breach", label: "Breach" },
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setStatusFilter(f.id)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium border ${
+                    statusFilter === f.id
+                      ? "bg-accent-dim text-accent border-accent-dim"
+                      : "text-text-secondary border-base-hairline hover:text-text-primary"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-xs text-text-tertiary ml-auto">{filteredReadings.length} readings</span>
+          </div>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-base-border text-left text-xs font-mono uppercase tracking-wide text-text-secondary">
@@ -222,7 +259,7 @@ export default function Emissions() {
               </tr>
             </thead>
             <tbody>
-              {readings.map((r) => (
+              {filteredReadings.map((r) => (
                 <tr key={r.date} className="border-b border-base-hairline last:border-0">
                   <td className="px-4 py-3 font-mono text-text-primary">{r.date}</td>
                   <td

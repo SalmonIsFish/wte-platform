@@ -2,6 +2,8 @@
 > AI-powered decision-support dashboard for Waste-to-Energy plant operations.
 > Built for PromptQuest Hackathon (Category: Sustainability)
 
+**🔗 Live Demo:** [wte-hackhaton.netlify.app](https://wte-hackhaton.netlify.app/)
+
 ## The Problem
 
 Malaysia is building 18 Waste-to-Energy (WTE) plants nationally. Through research, we identified four real operational pain points:
@@ -109,7 +111,9 @@ npm run build     # production build → dist/
 
 ## Deploying
 
-`dist/` is a static bundle — drag-and-drop onto Netlify, or:
+Live at **[wte-hackhaton.netlify.app](https://wte-hackhaton.netlify.app/)**, deployed via Netlify's GitHub integration — every push to `main` auto-builds and redeploys.
+
+`dist/` is also a plain static bundle if you want to deploy elsewhere — drag-and-drop onto Netlify manually, or:
 
 ```bash
 npm i -g vercel

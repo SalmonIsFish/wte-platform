@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, PackageSearch, Wind, Recycle, Settings as SettingsIcon, User, Sun, MoonS } from "lucide-react";
+import { LayoutDashboard, PackageSearch, Wind, Recycle, Settings as SettingsIcon, User, Sun, Moon} from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 const NAV = [

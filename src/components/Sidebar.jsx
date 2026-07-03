@@ -1,5 +1,5 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, PackageSearch, Wind, Recycle, Settings as SettingsIcon, User } from "lucide-react";
+import { LayoutDashboard, PackageSearch, Wind, Recycle, Settings as SettingsIcon, User, Sun, MoonS } from "lucide-react";
 import { useApp } from "../context/AppContext";
 
 const NAV = [
@@ -11,7 +11,7 @@ const NAV = [
 ];
 
 export default function Sidebar() {
-  const { currentUser } = useApp();
+  const { currentUser, theme, toggleTheme } = useApp();
 
   return (
     <aside className="w-56 shrink-0 bg-base-panel border-r border-base-border flex flex-col">
@@ -41,7 +41,13 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
-
+      <button
+        onClick={toggleTheme}
+        className="mx-2 mb-2 flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-base-panelraised transition-colors"
+      >
+        {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+        {theme === "dark" ? "Light mode" : "Dark mode"}
+      </button>
       <NavLink
         to="/profile"
         className={({ isActive }) =>

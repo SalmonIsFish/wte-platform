@@ -30,19 +30,6 @@ export function AppProvider({ children }) {
   const [role, setRole] = useState("supervisor");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
-  const [theme, setTheme] = useState(() => {
-  if (typeof window === "undefined") return "dark";
-    return localStorage.getItem("wte-theme") || "dark";
-  });
-
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-    localStorage.setItem("wte-theme", theme);
-  }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
 
   // Settings module: configurable thresholds. Changing these client-side
   // re-derives batch/emissions status live, so Settings actually does something
